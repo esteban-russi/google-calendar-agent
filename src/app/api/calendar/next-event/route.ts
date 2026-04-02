@@ -16,13 +16,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const calendarId =
-    request.nextUrl.searchParams.get("calendarId") || "primary";
+  const calendarIds =
+    request.nextUrl.searchParams.getAll("calendarId");
+  const ids = calendarIds.length > 0 ? calendarIds : ["primary"];
 
   try {
     const { current, next } = await getNextEvents(
       session.accessToken,
-      calendarId
+      ids
     );
     return NextResponse.json({ current, next });
   } catch (error) {

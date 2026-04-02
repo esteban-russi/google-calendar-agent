@@ -41,7 +41,10 @@ export default function CountdownDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
-  const [selectedCalendar, setSelectedCalendar] = useState("primary");
+  const [selectedCalendars, setSelectedCalendars] = useState<Set<string>>(
+    new Set(["primary"])
+  );
+  const [calPickerOpen, setCalPickerOpen] = useState(false);
 
   // Fetch calendar list on mount
   useEffect(() => {
@@ -51,6 +54,13 @@ export default function CountdownDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         setCalendars(data.calendars);
+        // Auto-select the primary calendar by its real ID
+        const primary = data.calendars.find(
+          (c: CalendarInfo) => c.primary
+        );
+        if (primary) {
+          setSelectedCalendars(new Set([primary.id]));
+        }
       } catch {
         // Non-critical — selector just won't appear
       }
@@ -58,11 +68,24 @@ export default function CountdownDashboard() {
     loadCalendars();
   }, []);
 
+  const toggleCalendar = (id: string) => {
+    setSelectedCalendars((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Don't allow deselecting all
+        if (next.size > 1) next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const fetchEvents = useCallback(async () => {
     try {
-      const res = await fetch(
-        `/api/calendar/next-event?calendarId=${encodeURIComponent(selectedCalendar)}`
-      );
+      const params = new URLSearchParams();
+      selectedCalendars.forEach((id) => params.append("calendarId", id));
+      const res = await fetch(`/api/calendar/next-event?${params.toString()}`);
       if (res.status === 401) {
         signOut({ callbackUrl: "/" });
         return;
@@ -77,7 +100,7 @@ export default function CountdownDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCalendar]);
+  }, [selectedCalendars]);
 
   // Fetch on mount, when calendar changes, and every 60 seconds
   useEffect(() => {
@@ -146,23 +169,53 @@ export default function CountdownDashboard() {
       <div className="absolute top-6 left-6 right-6 flex items-center justify-between">
         {/* Calendar selector */}
         {calendars.length > 1 ? (
-          <select
-            value={selectedCalendar}
-            onChange={(e) => setSelectedCalendar(e.target.value)}
-            className="rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300 outline-none hover:bg-white/20 transition cursor-pointer appearance-none pr-8 backdrop-blur-sm"
-            style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right 8px center",
-            }}
-          >
-            {calendars.map((cal) => (
-              <option key={cal.id} value={cal.id} className="bg-gray-900">
-                {cal.summary}
-                {cal.primary ? " (primary)" : ""}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              onClick={() => setCalPickerOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300 hover:bg-white/20 transition"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Calendars ({selectedCalendars.size})
+              <svg className={`h-3 w-3 transition-transform ${calPickerOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 12 12">
+                <path fill="currentColor" d="M6 8L1 3h10z" />
+              </svg>
+            </button>
+
+            {calPickerOpen && (
+              <>
+                {/* Backdrop to close */}
+                <div className="fixed inset-0 z-10" onClick={() => setCalPickerOpen(false)} />
+                {/* Dropdown */}
+                <div className="absolute left-0 top-full mt-2 z-20 w-64 max-h-72 overflow-y-auto rounded-lg bg-gray-900 border border-white/10 shadow-2xl py-1">
+                  {calendars.map((cal) => (
+                    <label
+                      key={cal.id}
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 cursor-pointer transition"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCalendars.has(cal.id)}
+                        onChange={() => toggleCalendar(cal.id)}
+                        className="h-4 w-4 rounded border-gray-600 accent-blue-500"
+                      />
+                      {cal.backgroundColor && (
+                        <span
+                          className="inline-block h-3 w-3 rounded-full shrink-0"
+                          style={{ backgroundColor: cal.backgroundColor }}
+                        />
+                      )}
+                      <span className="text-sm text-gray-300 truncate">
+                        {cal.summary}
+                        {cal.primary ? " (primary)" : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         ) : (
           <div />
         )}

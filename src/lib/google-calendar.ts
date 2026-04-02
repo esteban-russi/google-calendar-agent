@@ -48,7 +48,7 @@ export async function listCalendars(
 
 export async function getNextEvents(
   accessToken: string,
-  calendarId = "primary"
+  calendarIds: string[] = ["primary"]
 ): Promise<CalendarEvents> {
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
@@ -57,17 +57,35 @@ export async function getNextEvents(
 
   const now = new Date();
 
-  const response = await calendar.events.list({
-    calendarId,
-    timeMin: now.toISOString(),
-    maxResults: 10,
-    singleEvents: true,
-    orderBy: "startTime",
-  });
+  // Fetch events from all selected calendars in parallel
+  const responses = await Promise.all(
+    calendarIds.map((calendarId) =>
+      calendar.events
+        .list({
+          calendarId,
+          timeMin: now.toISOString(),
+          maxResults: 10,
+          singleEvents: true,
+          orderBy: "startTime",
+        })
+        .then((res) => res.data.items || [])
+        .catch(() => [])
+    )
+  );
 
-  const events = response.data.items;
+  // Merge and sort all events by start time
+  const allEvents = responses
+    .flat()
+    .filter((e) => e.start?.dateTime) // skip all-day events
+    .sort((a, b) => {
+      const aStart = new Date(a.start!.dateTime!).getTime();
+      const bStart = new Date(b.start!.dateTime!).getTime();
+      return aStart - bStart;
+    });
 
-  if (!events || events.length === 0) {
+  const events = allEvents;
+
+  if (events.length === 0) {
     return { current: null, next: null };
   }
 
