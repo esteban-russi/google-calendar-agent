@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getNextEvents } from "@/lib/google-calendar";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
 
   if (!session?.accessToken) {
@@ -16,8 +16,14 @@ export async function GET() {
     );
   }
 
+  const calendarId =
+    request.nextUrl.searchParams.get("calendarId") || "primary";
+
   try {
-    const { current, next } = await getNextEvents(session.accessToken);
+    const { current, next } = await getNextEvents(
+      session.accessToken,
+      calendarId
+    );
     return NextResponse.json({ current, next });
   } catch (error) {
     console.error("Calendar API error:", error);

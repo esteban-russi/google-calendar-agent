@@ -42,7 +42,7 @@ export const authConfig: NextAuthConfig = {
       authorization: {
         params: {
           scope:
-            "openid email profile https://www.googleapis.com/auth/calendar.events.readonly",
+            "openid email profile https://www.googleapis.com/auth/calendar.readonly",
           access_type: "offline",
           prompt: "consent",
         },

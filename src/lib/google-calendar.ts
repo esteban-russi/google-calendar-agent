@@ -12,13 +12,43 @@ export interface CalendarEvent {
   status: "upcoming" | "in-progress" | "none";
 }
 
+export interface CalendarInfo {
+  id: string;
+  summary: string;
+  backgroundColor?: string;
+  primary?: boolean;
+}
+
 export interface CalendarEvents {
   current: CalendarEvent | null;
   next: CalendarEvent | null;
 }
 
-export async function getNextEvents(
+export async function listCalendars(
   accessToken: string
+): Promise<CalendarInfo[]> {
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+  const response = await calendar.calendarList.list({ minAccessRole: "reader" });
+
+  const items = response.data.items;
+  if (!items) return [];
+
+  return items
+    .filter((c) => !c.deleted && !c.hidden)
+    .map((c) => ({
+      id: c.id || "",
+      summary: c.summary || "Untitled",
+      backgroundColor: c.backgroundColor || undefined,
+      primary: c.primary || false,
+    }));
+}
+
+export async function getNextEvents(
+  accessToken: string,
+  calendarId = "primary"
 ): Promise<CalendarEvents> {
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
@@ -28,7 +58,7 @@ export async function getNextEvents(
   const now = new Date();
 
   const response = await calendar.events.list({
-    calendarId: "primary",
+    calendarId,
     timeMin: now.toISOString(),
     maxResults: 10,
     singleEvents: true,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { signOut } from "next-auth/react";
-import type { CalendarEvent } from "@/lib/google-calendar";
+import type { CalendarEvent, CalendarInfo } from "@/lib/google-calendar";
 
 interface TimeLeft {
   hours: number;
@@ -40,10 +40,29 @@ export default function CountdownDashboard() {
   const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
+  const [selectedCalendar, setSelectedCalendar] = useState("primary");
+
+  // Fetch calendar list on mount
+  useEffect(() => {
+    async function loadCalendars() {
+      try {
+        const res = await fetch("/api/calendar/list");
+        if (!res.ok) return;
+        const data = await res.json();
+        setCalendars(data.calendars);
+      } catch {
+        // Non-critical — selector just won't appear
+      }
+    }
+    loadCalendars();
+  }, []);
 
   const fetchEvents = useCallback(async () => {
     try {
-      const res = await fetch("/api/calendar/next-event");
+      const res = await fetch(
+        `/api/calendar/next-event?calendarId=${encodeURIComponent(selectedCalendar)}`
+      );
       if (res.status === 401) {
         signOut({ callbackUrl: "/" });
         return;
@@ -58,10 +77,11 @@ export default function CountdownDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCalendar]);
 
-  // Fetch on mount and every 60 seconds
+  // Fetch on mount, when calendar changes, and every 60 seconds
   useEffect(() => {
+    setLoading(true);
     fetchEvents();
     const interval = setInterval(fetchEvents, 60_000);
     return () => clearInterval(interval);
@@ -122,13 +142,39 @@ export default function CountdownDashboard() {
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center px-4">
-      {/* Sign out button */}
-      <button
-        onClick={() => signOut({ callbackUrl: "/" })}
-        className="absolute top-6 right-6 rounded-md bg-white/10 px-4 py-2 text-sm text-gray-400 hover:bg-white/20 hover:text-white transition"
-      >
-        Sign out
-      </button>
+      {/* Top bar */}
+      <div className="absolute top-6 left-6 right-6 flex items-center justify-between">
+        {/* Calendar selector */}
+        {calendars.length > 1 ? (
+          <select
+            value={selectedCalendar}
+            onChange={(e) => setSelectedCalendar(e.target.value)}
+            className="rounded-md bg-white/10 px-3 py-2 text-sm text-gray-300 outline-none hover:bg-white/20 transition cursor-pointer appearance-none pr-8 backdrop-blur-sm"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239ca3af' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "no-repeat",
+              backgroundPosition: "right 8px center",
+            }}
+          >
+            {calendars.map((cal) => (
+              <option key={cal.id} value={cal.id} className="bg-gray-900">
+                {cal.summary}
+                {cal.primary ? " (primary)" : ""}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div />
+        )}
+
+        {/* Sign out button */}
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="rounded-md bg-white/10 px-4 py-2 text-sm text-gray-400 hover:bg-white/20 hover:text-white transition"
+        >
+          Sign out
+        </button>
+      </div>
 
       {!current && !next ? (
         /* No meetings */
