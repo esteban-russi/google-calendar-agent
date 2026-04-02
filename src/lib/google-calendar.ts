@@ -1,0 +1,81 @@
+import { google } from "googleapis";
+
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  location?: string;
+  start: string; // ISO date string
+  end: string;
+  hangoutLink?: string;
+  htmlLink?: string;
+  status: "upcoming" | "in-progress" | "none";
+}
+
+export interface CalendarEvents {
+  current: CalendarEvent | null;
+  next: CalendarEvent | null;
+}
+
+export async function getNextEvents(
+  accessToken: string
+): Promise<CalendarEvents> {
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const calendar = google.calendar({ version: "v3", auth: oauth2Client });
+
+  const now = new Date();
+
+  const response = await calendar.events.list({
+    calendarId: "primary",
+    timeMin: now.toISOString(),
+    maxResults: 10,
+    singleEvents: true,
+    orderBy: "startTime",
+  });
+
+  const events = response.data.items;
+
+  if (!events || events.length === 0) {
+    return { current: null, next: null };
+  }
+
+  let current: CalendarEvent | null = null;
+  let next: CalendarEvent | null = null;
+
+  for (const event of events) {
+    const start = event.start?.dateTime || event.start?.date;
+    const end = event.end?.dateTime || event.end?.date;
+
+    if (!start || !end) continue;
+
+    const startTime = new Date(start);
+    const endTime = new Date(end);
+
+    // Skip all-day events (they have date but not dateTime)
+    if (!event.start?.dateTime) continue;
+
+    const parsed: CalendarEvent = {
+      id: event.id || "",
+      summary: event.summary || "Untitled Event",
+      description: event.description || undefined,
+      location: event.location || undefined,
+      start: startTime.toISOString(),
+      end: endTime.toISOString(),
+      hangoutLink: event.hangoutLink || undefined,
+      htmlLink: event.htmlLink || undefined,
+      status: now >= startTime && now < endTime ? "in-progress" : "upcoming",
+    };
+
+    if (parsed.status === "in-progress" && !current) {
+      current = parsed;
+    } else if (parsed.status === "upcoming" && !next) {
+      next = parsed;
+    }
+
+    if (current && next) break;
+  }
+
+  return { current, next };
+}
