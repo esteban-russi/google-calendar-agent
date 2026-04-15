@@ -4,6 +4,8 @@ A real-time countdown dashboard showing the time remaining until your next Googl
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue) ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38bdf8)
 
+![App UI](figures/app-ui.png)
+
 ## Features
 
 - **Real-time countdown** — hours, minutes, and seconds ticking every second
